@@ -1,0 +1,101 @@
+------------------------PYTHON
+
+Here's a concise overview of each topic:
+
+### File I/O and Data Handling in Python
+
+1. **File I/O using Python**: Refers to reading from and writing to files using Python's built-in functions like `open()`, `read()`, `write()`, and `close()`.
+
+2. **Read Data from CSV File into Python List**: Use the `csv` module or `pandas` to load data from CSV files into Python lists for processing.
+
+3. **Processing Python Lists**: Involves iterating, modifying, and performing operations on lists using loops, list comprehensions, and built-in functions.
+
+4. **Lambda Functions in Python**: Anonymous functions defined with the `lambda` keyword for concise function definitions.
+
+5. **Usage of Lambda Functions**: Often used for short, throwaway functions in places like `map()`, `filter()`, and `sorted()`.
+
+6. **Filter Data in Python Lists using `filter` and `lambda`**: Filter elements in a list using `filter()` combined with a `lambda` function to define the condition.
+
+7. **Get Unique Values from List using `map` and `set`**: Use `set()` to get unique values from a list and `map()` to apply a function to each item.
+
+8. **Sort Python Lists using `key`**: Sort lists using the `sorted()` function or `list.sort()`, specifying a `key` function to determine sort order.
+
+### JSON Handling
+
+9. **Overview of JSON Strings and Files**: JSON (JavaScript Object Notation) is a lightweight data-interchange format that is easy for humans to read and write and easy for machines to parse and generate.
+
+10. **Read JSON Strings to Python dicts or lists**: Use `json.loads()` to parse JSON strings into Python dictionaries or lists.
+
+11. **Read JSON Schemas from File to Python dicts**: Use `json.load()` to read JSON files and convert them into Python dictionaries.
+
+12. **Processing JSON Data using Python**: Involves parsing, modifying, and extracting data from JSON objects using Python's `json` module.
+
+13. **Extract Details from Complex JSON Arrays using Python**: Navigate and extract data from nested and complex JSON structures using Python's list and dictionary operations.
+
+14. **Sort Data in JSON Arrays using Python**: Use Python's `sorted()` function with custom sorting criteria to order JSON arrays.
+
+15. **Create Function to get Column Details from Schemas JSON File**: Define functions to extract column metadata from JSON schema files for dynamic data processing.
+
+### Lists, Tuples, and Data Processing
+
+16. **Lists and Tuples in Python**: Lists are mutable, ordered collections, while tuples are immutable. Both are used to store collections of data.
+
+17. **Enriching Data using NumPy & Pandas**: Utilize NumPy for numerical computations and Pandas for data manipulation and analysis.
+
+18. **Pandas for Data Processing**: A powerful library for data analysis and manipulation, providing data structures like DataFrames and Series.
+
+19. **Reading CSV Data using Pandas**: Use `pandas.read_csv()` to load CSV data into DataFrames for analysis.
+
+20. **Read Data from CSV Files to Pandas DataFrames**: Convert CSV files to Pandas DataFrames using `pd.read_csv()`.
+
+21. **Filter Data in Pandas DataFrame using `query`**: Apply SQL-like queries to filter DataFrames using the `query()` method.
+
+22. **Get Count by Status using Pandas DataFrame APIs**: Use DataFrame methods like `groupby()` and `count()` to aggregate and summarize data.
+
+23. **Get Count by Month and Status using Pandas DataFrame APIs**: Group data by multiple dimensions, such as month and status, to obtain counts.
+
+24. **Create DataFrames using Dynamic Column List on CSV Data**: Build DataFrames from CSV files with dynamically determined columns.
+
+25. **Performing Inner Join between Pandas DataFrames**: Merge DataFrames on common columns using `pd.merge()` with `how='inner'`.
+
+26. **Perform Aggregations on Join Results**: Aggregate data after joining DataFrames using aggregation functions like `sum()`, `mean()`, etc.
+
+27. **Sort Data in Pandas DataFrames**: Sort DataFrames using `sort_values()` by one or more columns.
+
+28. **Writing Pandas DataFrames to Files**: Save DataFrames to various file formats like CSV, Excel, and JSON using `to_csv()`, `to_excel()`, and `to_json()`.
+
+29. **Write Pandas DataFrames to JSON Files**: Convert DataFrames to JSON format with `to_json()`.
+
+----------------PYSPARK
+Big Data refers to large volumes of data that require advanced methods for storage, processing, and analysis. Apache Spark is an open-source distributed computing system designed for fast, large-scale data processing.
+
+ARCHI
+
+Cluster Manager: Manages resources across a cluster (e.g., YARN, Mesos, Kubernetes).
+Spark Session: Entry point for interacting with Spark.
+Spark Context: Interface to the Spark cluster, allowing communication with the cluster manager.
+Driver Node: The node that runs the main application and schedules tasks.
+Worker Node: Nodes that execute tasks assigned by the driver.
+
+Low-level API (RDD): Resilient Distributed Dataset, the fundamental data structure in Spark.
+Datasets and DataFrames: Higher-level abstractions for structured data.
+SQL: Spark SQL for querying data using SQL syntax.
+
+
+
+COMPONENTS
+
+park Streaming: For real-time data processing.
+MLlib: Machine learning library.
+GraphX: For graph processing.
+DAG (Directed Acyclic Graph): Represents the sequence of computations.
+Lazy Evaluation: Computations are deferred until an action is performed.
+
+
+map, filter that create new RDDs/DataFrames.
+count, collect that trigger execution.
+
+
+
+Updating Data, Handling Null Values: Modify existing data and manage null values using methods like fillna(), dropna().
+
