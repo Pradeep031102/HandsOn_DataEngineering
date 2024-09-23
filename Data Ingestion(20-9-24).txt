@@ -1,0 +1,767 @@
+#Data Ingestion(1) Task 1: Raw Data Ingestion
+## Create a notebook to ingest raw weather data.
+#### Read the CSV file:
+```python
+{
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DateType, FloatType
+from pyspark.sql.utils import AnalysisException
+
+spark = SparkSession.builder.appName("WeatherDataIngestion").getOrCreate()
+
+weather_schema = StructType([
+    StructField("City", StringType(), True),
+    StructField("Date", DateType(), True),
+    StructField("Temperature", FloatType(), True),
+    StructField("Humidity", FloatType(), True)
+])
+
+try:
+    weather_df = spark.read.csv("dbfs:/FileStore/weather_data.csv", schema=weather_schema, header=True)
+except AnalysisException:
+    print("Error: File not found.")
+
+}
+```
+#### 2.Save the data to a Delta table:
+```python
+{
+weather_df.write.format("delta").mode("overwrite").save("/delta/raw_weather_data")
+}
+```
+# Task 2: Data Cleaning
+## Create a notebook to clean the raw weather data.
+#### 1. Load data from Delta table:
+```python
+{
+weather_raw_df = spark.read.format("delta").load("/delta/raw_weather_data")
+}
+```
+#### 2. Remove rows with missing or null values:
+```python
+{
+cleaned_weather_df = weather_raw_df.dropna()
+}
+```
+#### 3. Save the cleaned data:
+```python
+{
+cleaned_weather_df.write.format("delta").mode("overwrite").save("/delta/weather_cleaned")
+}
+```
+# Task 3: Data Transformation
+## Create a notebook to perform data transformation.
+#### 1. Load cleaned data:
+```python
+{
+weather_cleaned_df = spark.read.format("delta").load("/delta/weather_cleaned")
+}
+```
+#### 2. Calculate average temperature and humidity per city:
+```python
+{
+from pyspark.sql.functions import avg
+
+transformed_df = weather_cleaned_df.groupBy("City").agg(
+    avg("Temperature").alias("Avg_Temperature"),
+    avg("Humidity").alias("Avg_Humidity")
+)
+}
+```
+#### 3. Save the transformed data:
+```python
+{
+transformed_df.write.format("delta").mode("overwrite").save("/delta/weather_transformed")
+}
+```
+# Task 4: Create a Pipeline to Execute Notebooks
+## Create 4th notebook
+#### 1. Sequential execution of notebooks:
+```python
+{
+import subprocess
+
+notebooks = [
+    "/delta/raw_weather_data/data_ingestion.py",
+    "/delta/weather_cleaned/data_cleaning.py",
+    "/delta/weather_transformed/data_transformation.py"
+]
+
+for notebook in notebooks:
+    try:
+        subprocess.run(["databricks", "workspace", "import", notebook], check=True)
+        print(f"Successfully executed {notebook}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error occurred while executing {notebook}: {e}")
+
+}
+```
+#### 2. Add logging for progress tracking:
+```python
+{
+import logging
+
+logging.basicConfig(filename='/path/to/pipeline_log.log', level=logging.INFO)
+try:
+    logging.info(f'Successfully executed {notebook}')
+except Exception as e:
+    logging.error(f'Failed to execute {notebook}: {e}')
+}
+```
+
+# Bonus Task: Error Handling
+## Add error handling for missing files and corrupted data.
+#### 1. Handle missing file scenario:
+```python
+{
+import os
+
+if not os.path.exists("dbfs:/FileStore/weather_data.csv"):
+    raise FileNotFoundError("Weather data file not found")
+}
+```
+#### 2. Log errors for analysis:
+```python
+{
+try:
+    # Your code here
+except Exception as e:
+    logging.error(f"Error: {str(e)}")
+    error_df = spark.createDataFrame([(str(e),)], ["Error"])
+    error_df.write.format("delta").mode("append").save("/delta/error_log")
+}
+```
+# Data ingestion(2) Task 1: Raw Data Ingestion
+## Use the given CSV data to represent daily weather conditions, and load it into a Delta table in Databricks. Handle missing file errors and log them.
+#### 1. Sample CSV Data:
+```sql
+{
+City,Date,Temperature,Humidity
+New York,2024-01-01,30.5,60
+Los Angeles,2024-01-01,25.0,65
+Chicago,2024-01-01,-5.0,75
+Houston,2024-01-01,20.0,80
+Phoenix,2024-01-01,15.0,50
+}
+```
+#### 2. load the CSV data into a Delta table:
+```python
+{
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DateType, FloatType
+import logging
+import os
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("WeatherDataIngestion").getOrCreate()
+
+# Define schema
+weather_schema = StructType([
+    StructField("City", StringType(), True),
+    StructField("Date", DateType(), True),
+    StructField("Temperature", FloatType(), True),
+    StructField("Humidity", FloatType(), True)
+])
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/weather_data_ingestion.log', level=logging.INFO)
+
+# File path
+file_path = "dbfs:/FileStore/weather_data.csv"
+
+# Check if file exists
+if not os.path.exists("/dbfs/FileStore/weather_data.csv"):
+    logging.error("Weather data file not found")
+    raise FileNotFoundError("Weather data file not found")
+
+# Load the data into DataFrame
+weather_df = spark.read.csv(file_path, schema=weather_schema, header=True)
+
+# Save DataFrame as Delta table
+weather_df.write.format("delta").mode("overwrite").save("/delta/raw_weather_data")
+
+logging.info("Raw weather data ingested successfully.")
+
+}
+```
+# Task 2: Data Cleaning
+## Clean the ingested weather data, handling null or incorrect values in the Temperature and Humidity columns. After cleaning, save the updated data into a new Delta table.
+#### 1.Clean the Ingested weather data
+```python
+{
+from pyspark.sql.functions import col, when
+
+# Load raw data from Delta table
+weather_raw_df = spark.read.format("delta").load("/delta/raw_weather_data")
+
+# Handle null values and incorrect data
+cleaned_weather_df = weather_raw_df.withColumn(
+    "Temperature", when(col("Temperature").isNull() | (col("Temperature") < -50), None).otherwise(col("Temperature"))
+).withColumn(
+    "Humidity", when(col("Humidity").isNull() | (col("Humidity") > 100), None).otherwise(col("Humidity"))
+).dropna()
+
+# Save cleaned data into a new Delta table
+cleaned_weather_df.write.format("delta").mode("overwrite").save("/delta/weather_cleaned")
+
+logging.info("Weather data cleaned successfully.")
+
+}
+```
+# Task 3: Data Transformation
+##  Transform the cleaned data by calculating the average temperature and humidity for each city, and save the transformed data into a new Delta table.
+#### 1. calculate average temperature and humidity per city:
+```python
+{
+from pyspark.sql.functions import avg
+
+# Load cleaned data from Delta table
+weather_cleaned_df = spark.read.format("delta").load("/delta/weather_cleaned")
+
+# Calculate average temperature and humidity for each city
+transformed_df = weather_cleaned_df.groupBy("City").agg(
+    avg("Temperature").alias("Avg_Temperature"),
+    avg("Humidity").alias("Avg_Humidity")
+)
+
+# Save the transformed data into a new Delta table
+transformed_df.write.format("delta").mode("overwrite").save("/delta/weather_transformed")
+
+logging.info("Weather data transformed successfully.")
+
+}
+```
+# Task 4: Build and Run a Pipeline
+## Create a Databricks pipeline that executes the notebooks in sequence (Data ingestion, Data cleaning, Data transformation). Ensure logging and error handling for each step.
+#### 1. pipeline:
+```python
+{
+import subprocess
+import logging
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/pipeline.log', level=logging.INFO)
+
+notebooks = [
+    "/delta/raw_weather_data/data_ingestion.py",
+    "/delta/weather_cleaned/data_cleaning.py",
+    "/delta/weather_transformed/data_transformation.py"
+]
+
+# Sequential execution of notebooks
+for notebook in notebooks:
+    try:
+        subprocess.run(["databricks", "workspace", "import", notebook], check=True)
+        logging.info(f"Successfully executed {notebook}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error occurred while executing {notebook}: {e}")
+        raise e
+
+logging.info("Pipeline executed successfully.")
+
+}
+```
+# Data ingestion(3) Task 1: Customer Data Ingestion
+## Load the given CSV data representing customer transactions into a Delta table in Databricks. Implement error handling to manage missing files, and log appropriate messages.
+#### 1. Sample CSV Data:
+```
+CustomerID,TransactionDate,TransactionAmount,ProductCategory
+C001,2024-01-15,250.75,Electronics
+C002,2024-01-16,125.50,Groceries
+C003,2024-01-17,90.00,Clothing
+C004,2024-01-18,300.00,Electronics
+C005,2024-01-19,50.00,Groceries
+```
+#### 2. load the CSV data into a Delta table:
+```python
+{
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DateType, FloatType
+import logging
+import os
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("CustomerDataIngestion").getOrCreate()
+
+# Define schema
+customer_schema = StructType([
+    StructField("CustomerID", StringType(), True),
+    StructField("TransactionDate", DateType(), True),
+    StructField("TransactionAmount", FloatType(), True),
+    StructField("ProductCategory", StringType(), True)
+])
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/customer_data_ingestion.log', level=logging.INFO)
+
+# File path
+file_path = "dbfs:/FileStore/customer_data.csv"
+
+# Check if file exists
+if not os.path.exists("/dbfs/FileStore/customer_data.csv"):
+    logging.error("Customer data file not found")
+    raise FileNotFoundError("Customer data file not found")
+
+# Load the data into DataFrame
+customer_df = spark.read.csv(file_path, schema=customer_schema, header=True)
+
+# Save DataFrame as Delta table
+customer_df.write.format("delta").mode("overwrite").save("/delta/raw_customer_data")
+
+logging.info("Customer data ingested successfully.")
+
+}
+```
+# Task 2: Data Cleaning
+## Create a notebook to clean the ingested customer data by removing duplicate transactions and handling null values in the TransactionAmount column. Save the cleaned data into a new Delta table.
+#### 1. clean data:
+```python
+{
+from pyspark.sql.functions import col
+
+# Load raw data from Delta table
+customer_raw_df = spark.read.format("delta").load("/delta/raw_customer_data")
+
+# Remove duplicates and handle null values in TransactionAmount
+cleaned_customer_df = customer_raw_df.dropDuplicates().filter(col("TransactionAmount").isNotNull())
+
+# Save cleaned data into a new Delta table
+cleaned_customer_df.write.format("delta").mode("overwrite").save("/delta/customer_cleaned")
+
+logging.info("Customer data cleaned successfully.")
+
+}
+```
+# Task 3: Data Aggregation
+## Aggregate the cleaned data by ProductCategory to calculate the total transaction amount per category, and save the aggregated data into a Delta table.
+#### 1. aggregate data:
+```python
+{
+from pyspark.sql.functions import sum
+
+# Load cleaned data from Delta table
+cleaned_customer_df = spark.read.format("delta").load("/delta/customer_cleaned")
+
+# Aggregate data by ProductCategory to calculate total transaction amount per category
+aggregated_df = cleaned_customer_df.groupBy("ProductCategory").agg(
+    sum("TransactionAmount").alias("TotalTransactionAmount")
+)
+
+# Save aggregated data into a new Delta table
+aggregated_df.write.format("delta").mode("overwrite").save("/delta/customer_aggregated")
+
+logging.info("Customer data aggregated successfully.")
+
+}
+```
+# Task 4: Pipeline Creation
+Build a pipeline that:
+<ol>
+<li>Ingests the raw customer data (from Task 1).</li>
+<li>Cleans the data (from Task 2).</li>
+<li>Performs aggregation (from Task 3).</li>
+</ol>
+Ensure the pipeline handles missing files or errors during each stage and logs them properly.
+
+#### 1. pipeline:
+```python
+{
+import subprocess
+import logging
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/customer_pipeline.log', level=logging.INFO)
+
+notebooks = [
+    "/delta/raw_customer_data/data_ingestion.py",
+    "/delta/customer_cleaned/data_cleaning.py",
+    "/delta/customer_aggregated/data_aggregation.py"
+]
+
+# Sequential execution of notebooks
+for notebook in notebooks:
+    try:
+        subprocess.run(["databricks", "workspace", "import", notebook], check=True)
+        logging.info(f"Successfully executed {notebook}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error occurred while executing {notebook}: {e}")
+        raise e
+
+logging.info("Customer data pipeline executed successfully.")
+
+}
+```
+# Task 5: Data Validation
+## After completing the pipeline, add a data validation step to verify that the total number of transactions matches the sum of individual category transactions.
+#### 1. data validation:
+```python
+{
+# Load cleaned data and aggregated data from Delta tables
+cleaned_df = spark.read.format("delta").load("/delta/customer_cleaned")
+aggregated_df = spark.read.format("delta").load("/delta/customer_aggregated")
+
+# Calculate total transaction amount from the cleaned data
+total_cleaned_transactions = cleaned_df.agg(sum("TransactionAmount").alias("TotalTransactionAmount")).collect()[0][0]
+
+# Calculate total transaction amount from the aggregated data
+total_aggregated_transactions = aggregated_df.agg(sum("TotalTransactionAmount").alias("TotalTransactionAmount")).collect()[0][0]
+
+# Validate if the total transaction amounts match
+if total_cleaned_transactions == total_aggregated_transactions:
+    logging.info("Data validation successful: Total transaction amounts match.")
+else:
+    logging.error(f"Data validation failed: {total_cleaned_transactions} != {total_aggregated_transactions}")
+    raise ValueError("Total transaction amounts do not match.")
+
+}
+```
+# Data Ingestion(4) Task 1: Product Inventory Data Ingestion
+## Use the following CSV data to represent product inventory information:
+Sample CSV Data:
+```
+ProductID,ProductName,StockQuantity,Price,LastRestocked
+P001,Laptop,50,1500.00,2024-02-01
+P002,Smartphone,200,800.00,2024-02-02
+P003,Headphones,300,100.00,2024-01-29
+P004,Tablet,150,600.00,2024-01-30
+P005,Smartwatch,100,250.00,2024-02-03
+```
+#### 1. load the CSV data into a Delta table:
+```python
+{
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, DateType
+import os
+import logging
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("ProductInventoryIngestion").getOrCreate()
+
+# Define schema
+inventory_schema = StructType([
+    StructField("ProductID", StringType(), True),
+    StructField("ProductName", StringType(), True),
+    StructField("StockQuantity", IntegerType(), True),
+    StructField("Price", FloatType(), True),
+    StructField("LastRestocked", DateType(), True)
+])
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/inventory_data_ingestion.log', level=logging.INFO)
+
+# File path
+file_path = "dbfs:/FileStore/product_inventory.csv"
+
+# Check if file exists and is not corrupted
+if not os.path.exists("/dbfs/FileStore/product_inventory.csv"):
+    logging.error("Inventory data file not found")
+    raise FileNotFoundError("Inventory data file not found")
+
+try:
+    # Load the CSV file into a DataFrame
+    inventory_df = spark.read.csv(file_path, schema=inventory_schema, header=True)
+    
+    # Save DataFrame as a Delta table
+    inventory_df.write.format("delta").mode("overwrite").save("/delta/raw_inventory_data")
+    logging.info("Inventory data ingested successfully.")
+except Exception as e:
+    logging.error(f"Error ingesting inventory data: {e}")
+    raise e
+
+}
+```
+# Task 2: Data Cleaning
+## Clean the ingested product data by ensuring there are no null values in StockQuantity and Price columns. Remove records where StockQuantity is less than 0, and save the cleaned data to a new Delta table.
+#### 1. clean data:
+```python
+{
+from pyspark.sql.functions import col
+
+# Load raw inventory data from Delta table
+inventory_raw_df = spark.read.format("delta").load("/delta/raw_inventory_data")
+
+# Remove rows with null values in StockQuantity and Price
+cleaned_inventory_df = inventory_raw_df.filter(
+    col("StockQuantity").isNotNull() & col("Price").isNotNull()
+)
+
+# Remove rows where StockQuantity is less than 0
+cleaned_inventory_df = cleaned_inventory_df.filter(col("StockQuantity") >= 0)
+
+# Save cleaned data into a new Delta table
+cleaned_inventory_df.write.format("delta").mode("overwrite").save("/delta/cleaned_inventory_data")
+
+logging.info("Inventory data cleaned successfully.")
+
+}
+```
+# Task 3: Inventory Analysis
+## Create a notebook to analyze the inventory data by calculating the total stock value for each product (i.e., StockQuantity * Price) and finding products that need restocking (e.g., StockQuantity < 100). Save the analysis results to a Delta table.
+#### 1. inventory analysis:
+```python
+{
+from pyspark.sql.functions import expr
+
+# Load cleaned inventory data
+cleaned_inventory_df = spark.read.format("delta").load("/delta/cleaned_inventory_data")
+
+# Calculate total stock value for each product
+inventory_analysis_df = cleaned_inventory_df.withColumn(
+    "TotalStockValue", expr("StockQuantity * Price")
+)
+
+# Find products that need restocking (StockQuantity < 100)
+restock_needed_df = cleaned_inventory_df.filter(col("StockQuantity") < 100)
+
+# Save analysis results into a Delta table
+inventory_analysis_df.write.format("delta").mode("overwrite").save("/delta/inventory_analysis")
+restock_needed_df.write.format("delta").mode("overwrite").save("/delta/restock_needed")
+
+logging.info("Inventory analysis completed and saved successfully.")
+
+}
+```
+# Task 4: Build an Inventory Pipeline
+Build a Databricks pipeline that:
+<ol>
+<li>Ingests the product inventory data (from Task 1).</li>
+<li>Cleans the data (from Task 2).</li>
+<li>Performs inventory analysis (from Task 3).</li>
+</ol>
+Ensure the pipeline handles errors and logs progress at each step.
+
+#### 1. pipeline:
+```python
+{
+import subprocess
+import logging
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/inventory_pipeline.log', level=logging.INFO)
+
+# List of notebooks to execute in sequence
+notebooks = [
+    "/delta/raw_inventory_data/data_ingestion.py",
+    "/delta/cleaned_inventory_data/data_cleaning.py",
+    "/delta/inventory_analysis/data_analysis.py"
+]
+
+# Execute each notebook in sequence
+for notebook in notebooks:
+    try:
+        subprocess.run(["databricks", "workspace", "import", notebook], check=True)
+        logging.info(f"Successfully executed {notebook}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error occurred while executing {notebook}: {e}")
+        raise e
+
+logging.info("Inventory pipeline executed successfully.")
+
+}
+```
+# Task 5: Inventory Monitoring
+## Create a monitoring notebook that checks the Delta table for any products that need restocking (i.e., StockQuantity < 50). The notebook should send an alert if any product is below the threshold.
+#### 1. inventory monitoring:
+```python
+{
+from pyspark.sql.functions import col
+
+# Load the Delta table
+inventory_df = spark.read.format("delta").load("/delta/cleaned_inventory_data")
+
+# Check for products that need restocking (StockQuantity < 50)
+low_stock_df = inventory_df.filter(col("StockQuantity") < 50)
+
+# If any products need restocking, send an alert
+if low_stock_df.count() > 0:
+    logging.info("Alert: Some products need restocking.")
+    low_stock_df.show()
+    # You can integrate an alerting system here, such as email or Slack notifications.
+else:
+    logging.info("All products are sufficiently stocked.")
+
+logging.info("Inventory monitoring completed.")
+
+}
+```
+# Data Ingestion(5) Task 1: Employee Attendance Data Ingestion
+## Use the following CSV data representing employee attendance logs:
+Sample csv data:
+```
+EmployeeID,Date,CheckInTime,CheckOutTime,HoursWorked
+E001,2024-03-01,09:00,17:00,8
+E002,2024-03-01,09:15,18:00,8.75
+E003,2024-03-01,08:45,17:15,8.5
+E004,2024-03-01,10:00,16:30,6.5
+E005,2024-03-01,09:30,18:15,8.75
+```
+#### 1. Load the CSV data into a Delta table with error handling:
+```python
+{
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, DateType, FloatType, TimestampType
+import os
+import logging
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("EmployeeAttendanceIngestion").getOrCreate()
+
+# Define schema for the CSV data
+attendance_schema = StructType([
+    StructField("EmployeeID", StringType(), True),
+    StructField("Date", DateType(), True),
+    StructField("CheckInTime", StringType(), True),  # Could also use TimestampType with parsing
+    StructField("CheckOutTime", StringType(), True),
+    StructField("HoursWorked", FloatType(), True)
+])
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/attendance_ingestion.log', level=logging.INFO)
+
+# File path
+file_path = "dbfs:/FileStore/attendance_data.csv"
+
+# Check if the file exists
+if not os.path.exists("/dbfs/FileStore/attendance_data.csv"):
+    logging.error("Attendance data file not found.")
+    raise FileNotFoundError("Attendance data file not found.")
+
+try:
+    # Read the CSV file into a DataFrame
+    attendance_df = spark.read.csv(file_path, schema=attendance_schema, header=True)
+    
+    # Save DataFrame as a Delta table
+    attendance_df.write.format("delta").mode("overwrite").save("/delta/raw_attendance_data")
+    logging.info("Employee attendance data ingested successfully.")
+except Exception as e:
+    logging.error(f"Error ingesting attendance data: {e}")
+    raise e
+
+}
+```
+# Task 2: Data Cleaning
+## Clean the ingested attendance data:
+<ol>
+<li>Remove rows with null or invalid values in the CheckInTime or CheckOutTime columns.</li>
+<li>Ensure the HoursWorked column is calculated correctly (CheckOutTime - CheckInTime).</li>
+</ol>
+
+#### 1. clean data:
+```python
+{
+from pyspark.sql.functions import col, unix_timestamp
+
+# Load raw attendance data from Delta table
+attendance_raw_df = spark.read.format("delta").load("/delta/raw_attendance_data")
+
+# Filter out rows with null CheckInTime or CheckOutTime
+cleaned_attendance_df = attendance_raw_df.filter(
+    col("CheckInTime").isNotNull() & col("CheckOutTime").isNotNull()
+)
+
+# Ensure the HoursWorked column is calculated correctly
+cleaned_attendance_df = cleaned_attendance_df.withColumn(
+    "HoursWorked", 
+    (unix_timestamp(col("CheckOutTime"), "HH:mm") - unix_timestamp(col("CheckInTime"), "HH:mm")) / 3600
+)
+
+# Save cleaned data into a new Delta table
+cleaned_attendance_df.write.format("delta").mode("overwrite").save("/delta/cleaned_attendance_data")
+
+logging.info("Employee attendance data cleaned successfully.")
+
+}
+```
+# Task 3: Attendance Summary
+## Summarize employee attendance:
+<ol>
+<li>Calculate the total hours worked by each employee for the current month.</li>
+<li>Identify employees who have worked overtime (e.g., more than 8 hours on any given day).</li>
+</li>
+
+#### 1. attendance summary:
+```python
+{
+from pyspark.sql.functions import col, sum, date_format
+
+# Load cleaned attendance data
+cleaned_attendance_df = spark.read.format("delta").load("/delta/cleaned_attendance_data")
+
+# Filter for the current month
+current_month_df = cleaned_attendance_df.filter(
+    date_format(col("Date"), "yyyy-MM") == "2024-03"  # Modify for dynamic current month
+)
+
+# Calculate total hours worked by each employee for the current month
+total_hours_df = current_month_df.groupBy("EmployeeID").agg(
+    sum("HoursWorked").alias("TotalHoursWorked")
+)
+
+# Identify employees who worked overtime (> 8 hours in a day)
+overtime_df = current_month_df.filter(col("HoursWorked") > 8)
+
+# Save attendance summary and overtime data into Delta tables
+total_hours_df.write.format("delta").mode("overwrite").save("/delta/attendance_summary")
+overtime_df.write.format("delta").mode("overwrite").save("/delta/overtime_summary")
+
+logging.info("Attendance summary and overtime calculation completed.")
+
+}
+```
+# Task 4: Create an Attendance Pipeline
+## Build a Databricks pipeline that:
+<ol>
+<li>Ingests employee attendance data (from Task 1).</li>
+<li>Cleans the data (from Task 2).</li>
+<li>Summarizes attendance and calculates overtime (from Task 3).</li>
+</ol>
+
+#### 1. attendance pipeline:
+```python
+{
+import subprocess
+import logging
+
+# Set up logging
+logging.basicConfig(filename='/dbfs/FileStore/logs/attendance_pipeline.log', level=logging.INFO)
+
+# List of notebooks to execute in sequence
+notebooks = [
+    "/delta/raw_attendance_data/data_ingestion.py",
+    "/delta/cleaned_attendance_data/data_cleaning.py",
+    "/delta/attendance_summary/data_summary.py"
+]
+
+# Execute each notebook in sequence
+for notebook in notebooks:
+    try:
+        subprocess.run(["databricks", "workspace", "import", notebook], check=True)
+        logging.info(f"Successfully executed {notebook}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error occurred while executing {notebook}: {e}")
+        raise e
+
+logging.info("Employee attendance pipeline executed successfully.")
+
+}
+```
+# Task 5: Time Travel with Delta Lake
+## Implement time travel using Delta Lake to roll back the attendance data to a previous version.
+#### 1. time travel:
+```python
+{
+# Rollback to a previous version of the Delta table
+# Use the version number (e.g., version 1) or a specific timestamp
+attendance_df_version = spark.read.format("delta").option("versionAsOf", 1).load("/delta/cleaned_attendance_data")
+
+# Alternatively, use timestamp-based rollback
+# attendance_df_version = spark.read.format("delta").option("timestampAsOf", "2024-03-02T00:00:00Z").load("/delta/cleaned_attendance_data")
+
+attendance_df_version.show()
+
+# Inspect the history of the Delta table
+history_df = spark.sql("DESCRIBE HISTORY delta.`/delta/cleaned_attendance_data`")
+history_df.show()
+
+}
+```

@@ -1,0 +1,619 @@
+# Mini Project: Data Governance Using Unity Catalog - Advanced Capabilities
+
+
+## Task 1: Set Up Unity Catalog Objects with Multiple Schemas
+### 1. Create a Catalog:
+```sql
+{
+CREATE CATALOG finance_data_catalog;
+}
+```
+### 2. Create Multiple Schemas:
+
+```sql
+{
+CREATE SCHEMA finance_data_catalog.transaction_data;
+CREATE SCHEMA finance_data_catalog.customer_data;
+}
+```
+
+### 3. Create Tables in Each Schema
+```sql
+{
+CREATE TABLE  finance_data_catalog.transaction_data.transactions (
+TransactionID STRING,
+CustomerID STRING,
+TransactionAmount DOUBLE,
+TransactionDate DATE
+);
+
+CREATE TABLE  finance_data_catalog.customer_data.customers (
+CustomerID STRING,
+CustomerName STRING,
+Email STRING,
+Country STRING
+);
+}
+```
+
+## Task 2: Data Discovery Across Schemas
+
+###  1. Explore Metadata:
+```sql
+{
+SHOW TABLES IN finance_data_catalog.transaction_data;
+SHOW TABLES IN finance_data_catalog.customer_data;
+}
+```
+### 2. Data Profiling:
+```sql{
+-- Profile transaction amounts
+SELECT 
+  MIN(TransactionAmount) as min_amount,
+  MAX(TransactionAmount) as max_amount,
+  AVG(TransactionAmount) as avg_amount,
+  PERCENTILE(TransactionAmount, 0.5) as median_amount
+FROM finance_data_catalog.transaction_data.transactions;
+
+-- Profile customer locations
+SELECT 
+  Country,
+  COUNT(*) as customer_count,
+  COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () as percentage
+FROM finance_data_catalog.customer_data.customers
+GROUP BY Country
+ORDER BY customer_count DESC;
+}
+```
+
+### 3.Tagging Sensitive Data:
+
+```sql{
+-- Tag Email as PII
+ALTER TABLE finance_data_catalog.customer_data.customers
+ALTER COLUMN Email
+SET TAGS ('PII' = 'true');
+
+-- Tag TransactionAmount as sensitive financial data
+ALTER TABLE finance_data_catalog.transaction_data.transactions
+ALTER COLUMN TransactionAmount
+SET TAGS ('sensitive' = 'true', 'financial_data' = 'true');
+}
+```
+
+## Task 3: Implement Data Lineage and Auditing
+### 1. Track Data Lineage:
+
+```sql{
+-- Create a view that merges data from both schemas
+CREATE OR REPLACE VIEW finance_data_catalog.combined_view AS
+SELECT 
+  t.TransactionID,
+  t.CustomerID,
+  c.CustomerName,
+  t.TransactionAmount,
+  t.TransactionDate,
+  c.Country
+FROM finance_data_catalog.transaction_data.transactions t
+JOIN finance_data_catalog.customer_data.customers c ON t.CustomerID = c.CustomerID;
+}
+```
+
+### 2. Audit User Actions:
+Enable audit logs for operations performed on the tables
+<ol>
+    <li>  Navigate to admin console in databricks</li>
+    <li>  Go to audit logs tab and enable audit logs</li>
+</ol>
+Track who accessed or modified the data.
+Once audit logging is enabled, you can monitor user actions such as:
+<ol>
+<li>Who queried or accessed the tables.</li>
+<li>Who performed modifications (e.g., inserts, updates, deletes) on the tables</li>
+
+
+## Task 4: Access Control and Permissions
+
+#### 1. Set Up Roles and Groups:
+```sql
+{
+CREATE GROUP DataEngineers;
+CREATE GROUP DataAnalysts;
+}
+```
+
+#### 2. Assign appropriate roles
+```sql
+{
+-- For data engineers full access
+GRANT ALL PRIVILEGES ON SCHEMA finance_data_catalog.transaction_data
+TO `DataEngineers`;
+GRANT ALL PRIVILEGES ON SCHEMA finance_data_catalog.customer_data
+TO `DataEngineers`;
+GRANT ALL PRIVILEGES ON TABLE
+finance_data_catalog.transaction_data.transactions TO `DataEngineers`;
+GRANT ALL PRIVILEGES ON TABLE
+finance_data_catalog.customer_data.customers TO `DataEngineers`;
+
+-- For data analysts Read-only access
+GRANT SELECT ON SCHEMA finance_data_catalog.customer_data TO
+`DataAnalysts`;
+GRANT SELECT ON TABLE finance_data_catalog.customer_data.customers TO
+`DataAnalysts`;
+GRANT SELECT ON TABLE finance_data_catalog.transaction_data.transactions
+TO `DataAnalysts`;
+}
+```
+
+#### 2. Row-Level Security:
+```sql
+{
+    -- Create a view with row-level security for high-value transactions
+CREATE OR REPLACE VIEW finance_data_catalog.transaction_data.high_value_transactions AS
+SELECT * FROM finance_data_catalog.transaction_data.transactions
+WHERE TransactionAmount > 10000 AND is_member('high_value_analysts');
+
+-- Grant access to the view
+GRANT SELECT ON VIEW finance_data_catalog.transaction_data.high_value_transactions TO ROLE DataAnalysts;
+}
+```
+## Task 5: Data Governance Best Practices
+#### 1. Create Data Quality Rules:
+```sql
+{
+-- Create a view with data quality rules
+CREATE OR REPLACE VIEW finance_data_catalog.validated_transactions AS
+SELECT *
+FROM finance_data_catalog.transaction_data.transactions
+WHERE TransactionAmount >= 0;
+
+-- Create a view to validate email format
+CREATE OR REPLACE VIEW finance_data_catalog.validated_customers AS
+SELECT *
+FROM finance_data_catalog.customer_data.customers
+WHERE Email RLIKE '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$';
+}
+```
+#### 2. Validate Data Governance:
+```sql
+{
+-- Check if all transactions are non-negative
+SELECT COUNT(*) as invalid_transactions
+FROM finance_data_catalog.transaction_data.transactions
+WHERE TransactionAmount < 0;
+
+-- Check if all emails are valid
+SELECT COUNT(*) as invalid_emails
+FROM finance_data_catalog.customer_data.customers
+WHERE Email NOT RLIKE '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$';
+
+-- Check lineage
+DESCRIBE EXTENDED finance_data_catalog.combined_view;
+
+-- Check audit logs (example query, actual implementation may vary)
+SELECT * FROM system.audit_logs
+WHERE table_name IN ('transactions', 'customers')
+ORDER BY event_time DESC
+LIMIT 10;
+}
+```
+
+## Task 6: Data Lifecycle Management
+
+#### 1. Implement Time Travel:
+```sql
+{
+-- Query data as of 7 days ago
+SELECT * FROM finance_data_catalog.transaction_data.transactions VERSION AS OF 7;
+
+-- Restore table to a previous version
+RESTORE TABLE finance_data_catalog.transaction_data.transactions TO VERSION AS OF 7;
+}
+```
+#### 2. Run a Vacuum Operation:
+```sql
+{
+-- Run vacuum operation
+VACUUM finance_data_catalog.transaction_data.transactions RETAIN 168 HOURS;
+VACUUM finance_data_catalog.customer_data.customers RETAIN 168 HOURS;
+}
+```
+
+# Mini Project: Advanced Data Governance and Security Using Unity Catalog
+## Task 1: Set Up Multi-Tenant Data Architecture Using Unity Catalog
+#### 1. Create a new catlog
+```sql
+{
+CREATE CATALOG  corporate_data_catalog;
+}
+```
+#### 2. Create Schemas for Each Department
+```sql
+{
+CREATE SCHEMA  sales_data;
+CREATE SCHEMA  hr_data;
+CREATE SCHEMA  finance_data;
+}
+```
+#### 3. Create tables in each schema
+```sql
+{
+-- Sales Data Table
+CREATE TABLE IF NOT EXISTS sales_data.sales (
+  SalesID STRING,
+  CustomerID STRING,
+  SalesAmount DOUBLE,
+  SalesDate DATE
+);
+
+-- HR Data Table
+CREATE TABLE IF NOT EXISTS hr_data.employees (
+  EmployeeID STRING,
+  EmployeeName STRING,
+  Department STRING,
+  Salary DOUBLE
+);
+
+-- Finance Data Table
+CREATE TABLE IF NOT EXISTS finance_data.invoices (
+  InvoiceID STRING,
+  VendorID STRING,
+  InvoiceAmount DOUBLE,
+  PaymentDate DATE
+);
+}
+```
+## Task 2: Enable Data Discovery for Cross-Departmental Data
+#### 1. Search for Tables Across Departments:
+```sql
+{
+-- List all tables in the catalog
+SHOW TABLES IN corporate_data_catalog;
+
+-- Search for tables containing 'Amount' in their schema
+SHOW TABLES IN corporate_data_catalog LIKE '*Amount*';
+}
+```
+#### 2. Tag Sensitive Information:
+```sql
+{
+-- Tag Salary as sensitive
+ALTER TABLE corporate_data_catalog.hr_data.employees
+ALTER COLUMN Salary
+SET TAGS ('sensitive' = 'true', 'PII' = 'true');
+
+-- Tag InvoiceAmount as sensitive
+ALTER TABLE corporate_data_catalog.finance_data.invoices
+ALTER COLUMN InvoiceAmount
+SET TAGS ('sensitive' = 'true', 'financial_data' = 'true');
+}
+```
+#### 3. Data Profiling:
+```sql
+{
+-- Sales data profiling
+SELECT 
+  MIN(SalesAmount) as min_sale,
+  MAX(SalesAmount) as max_sale,
+  AVG(SalesAmount) as avg_sale,
+  PERCENTILE(SalesAmount, 0.5) as median_sale
+FROM corporate_data_catalog.sales_data.sales;
+
+-- Employee salary profiling
+SELECT 
+  Department,
+  MIN(Salary) as min_salary,
+  MAX(Salary) as max_salary,
+  AVG(Salary) as avg_salary
+FROM corporate_data_catalog.hr_data.employees
+GROUP BY Department;
+
+-- Finance data profiling
+SELECT 
+  MIN(InvoiceAmount) as min_invoice,
+  MAX(InvoiceAmount) as max_invoice,
+  AVG(InvoiceAmount) as avg_invoice
+FROM corporate_data_catalog.finance_data.invoices;
+}
+```
+## Task 3: Implement Data Lineage and Data Auditing
+#### 1. Track Data Lineage:
+```sql
+{
+-- Create a view that merges sales and finance data
+CREATE OR REPLACE VIEW corporate_data_catalog.finance_data.sales_finance_report AS
+SELECT 
+  s.SalesID,
+  s.CustomerID,
+  s.SalesAmount,
+  s.SalesDate,
+  i.InvoiceID,
+  i.VendorID,
+  i.InvoiceAmount,
+  i.PaymentDate
+FROM corporate_data_catalog.sales_data.sales s
+JOIN corporate_data_catalog.finance_data.invoices i ON s.SalesDate = i.PaymentDate;
+}
+```
+#### 2. Enable Data Audit Logs:
+```sql
+{
+-- Enable audit logs (this is typically done at the account level)
+-- Check audit logs (example query, actual implementation may vary)
+SELECT * FROM system.audit_logs
+WHERE table_name IN ('employees', 'invoices')
+ORDER BY event_time DESC;
+}
+```
+## Task 4: Data Access Control and Security
+#### 1. Set Up Roles and Permissions:
+```sql
+{
+-- Create roles
+CREATE ROLE IF NOT EXISTS SalesTeam;
+CREATE ROLE IF NOT EXISTS FinanceTeam;
+CREATE ROLE IF NOT EXISTS HRTeam;
+
+-- Assign permissions
+GRANT SELECT ON SCHEMA corporate_data_catalog.sales_data TO ROLE SalesTeam;
+GRANT SELECT ON SCHEMA corporate_data_catalog.sales_data TO ROLE FinanceTeam;
+GRANT SELECT ON SCHEMA corporate_data_catalog.finance_data TO ROLE FinanceTeam;
+GRANT ALL PRIVILEGES ON SCHEMA corporate_data_catalog.hr_data TO ROLE HRTeam;
+}
+```
+
+#### 2. Implement Column-Level Security:
+```sql
+{
+-- Revoke access to Salary column for general HRTeam
+REVOKE SELECT (Salary) ON TABLE corporate_data_catalog.hr_data.employees FROM ROLE HRTeam;
+
+-- Create a role for HR managers
+CREATE ROLE IF NOT EXISTS HRManagers;
+
+-- Grant Salary column access to HR managers
+GRANT SELECT (Salary) ON TABLE corporate_data_catalog.hr_data.employees TO ROLE HRManagers;
+}
+```
+#### 3. Row-Level Security:
+```sql
+{
+-- Create a view with row-level security for sales data
+CREATE OR REPLACE VIEW corporate_data_catalog.sales_data.my_sales AS
+SELECT * FROM corporate_data_catalog.sales_data.sales
+WHERE SalesID IN (SELECT SalesID FROM corporate_data_catalog.hr_data.employees WHERE EmployeeID = current_user());
+
+-- Grant access to the view
+GRANT SELECT ON VIEW corporate_data_catalog.sales_data.my_sales TO ROLE SalesTeam;
+}
+```
+## Task 5: Data Governance Best Practices
+#### 1. Define Data Quality Rules:
+```sql
+{
+-- Create a view with data quality rules for sales data
+CREATE OR REPLACE VIEW corporate_data_catalog.sales_data.valid_sales AS
+SELECT * FROM corporate_data_catalog.sales_data.sales
+WHERE SalesAmount > 0;
+
+-- Create a view with data quality rules for HR data
+CREATE OR REPLACE VIEW corporate_data_catalog.hr_data.valid_employees AS
+SELECT * FROM corporate_data_catalog.hr_data.employees
+WHERE Salary > 0;
+
+-- Create a view to validate invoice amounts match payment records
+CREATE OR REPLACE VIEW corporate_data_catalog.finance_data.valid_invoices AS
+SELECT i.*
+FROM corporate_data_catalog.finance_data.invoices i
+JOIN corporate_data_catalog.sales_data.sales s ON i.PaymentDate = s.SalesDate AND i.InvoiceAmount = s.SalesAmount;
+}
+```
+#### 2. Apply Time Travel for Data Auditing:
+```sql
+{
+RESTORE TABLE corporate_data_catalog.finance_data.finance_table
+TO VERSION AS OF 5;
+}
+```
+## Task 6: Optimize and Clean Up Delta Tables
+#### 1. Optimize Delta Tables:
+```sql
+{
+-- Optimize sales_data table
+OPTIMIZE corporate_data_catalog.sales_data.sales
+ZORDER BY (SalesDate);
+
+-- Optimize finance_data table
+OPTIMIZE corporate_data_catalog.finance_data.invoices
+ZORDER BY (PaymentDate);
+}
+```
+#### 2. Vacuum Delta Tables:
+```sql
+{
+-- Vacuum sales_data table
+VACUUM corporate_data_catalog.sales_data.sales RETAIN 168 HOURS;
+
+-- Vacuum finance_data table
+VACUUM corporate_data_catalog.finance_data.invoices RETAIN 168 HOURS;
+}
+```
+# Mini Project: Building a Secure Data Platform with Unity Catalog
+## Task 1: Set Up Unity Catalog for Multi-Domain Data Management
+#### 1. Create a new catalog
+```sql
+{
+CREATE CATALOG enterprise_data_catalog;
+}
+```
+#### 2. Create Schemas for Each Department
+```sql
+{
+CREATE SCHEMA enterprise_data_catalog.marketing_data;
+CREATE SCHEMA enterprise_data_catalog.operations_data;
+CREATE SCHEMA enterprise_data_catalog.it_data;
+}
+```
+#### 3. Create tables in each schema
+```sql
+{
+-- For Marketing data
+CREATE TABLE enterprise_data_catalog.marketing_data.marketing_table(
+CampaignID INT,
+CampaignName STRING,
+Budget DECIMAL(10,2),
+StartDate DATE
+);
+
+-- For Operations Data
+CREATE TABLE enterprise_data_catalog.operations_data.operations_table(
+OrderID INT,
+ProductID INT,
+Quantity INT,
+ShippingStatus STRING
+);
+-- For IT Data
+>> CREATE TABLE enterprise_data_catalog.it_data.it_table(
+IncidentID STRING,
+ReportedBy STRING,
+IssueType STRING,
+ResolutionTime INT
+);
+}
+```
+# Task 2: Data Discovery and Classification
+#### 1. Search for Data Across Schemas:
+```sql
+{
+-- List all tables in the catalog
+SHOW TABLES IN enterprise_data_catalog;
+
+-- Search for tables with specific columns
+SHOW TABLES IN enterprise_data_catalog WHERE table_name LIKE '%budget%' OR table_name LIKE '%resolution%';
+}
+```
+#### 2. Tag Sensitive Information:
+```sql
+{
+-- Tag Budget column as sensitive
+ALTER TABLE marketing_data.campaigns ALTER COLUMN Budget SET TAGS ('sensitive' = 'true');
+
+-- Tag ResolutionTime column as sensitive
+ALTER TABLE it_data.incidents ALTER COLUMN ResolutionTime SET TAGS ('sensitive' = 'true');
+}
+```
+#### 3. Data Profiling:
+```sql
+{
+-- Profile marketing budgets
+SELECT 
+  MIN(Budget) as min_budget,
+  MAX(Budget) as max_budget,
+  AVG(Budget) as avg_budget
+FROM marketing_data.campaigns;
+
+-- Profile shipping statuses
+SELECT 
+  ShippingStatus,
+  COUNT(*) as count
+FROM operations_data.orders
+GROUP BY ShippingStatus;
+}
+```
+# Task 3: Data Lineage and Auditing
+#### 1. Track Data Lineage Across Schemas:
+```sql
+{
+-- Create a view linking marketing campaigns with product orders
+CREATE OR REPLACE VIEW enterprise_data_catalog.marketing_data.campaign_performance AS
+SELECT 
+  c.CampaignID,
+  c.CampaignName,
+  o.OrderID,
+  o.ProductID,
+  o.Quantity
+FROM marketing_data.campaigns c
+JOIN operations_data.orders o ON c.StartDate <= o.OrderDate -- Assuming OrderDate exists in the orders table
+}
+```
+#### 2. Enable and Analyze Audit Logs:
+Enabling audit logs for operations performed on the tables
+<ol>
+<li> Navigate to admin console in databricks</li>
+<li> Go to audit logs tab and enable audit logs</li>
+<ol>
+
+# Task 4: Implement Fine-Grained Access Control
+#### 1. Create User Roles and Groups:
+```sql
+{
+-- Create groups
+CREATE GROUP  MarketingTeam;
+CREATE GROUP  OperationsTeam;
+CREATE GROUP  ITSupportTeam;
+
+-- Grant permissions
+GRANT SELECT ON SCHEMA marketing_data TO MarketingTeam;
+GRANT SELECT ON SCHEMA marketing_data TO OperationsTeam;
+GRANT SELECT ON SCHEMA operations_data TO OperationsTeam;
+GRANT SELECT, UPDATE ON SCHEMA it_data TO ITSupportTeam;
+}
+```
+#### 2. Implement Column-Level Security:
+```sql
+{
+-- Revoke access to Budget column for all users
+REVOKE SELECT ON COLUMN marketing_data.campaigns.Budget FROM PUBLIC;
+
+-- Grant access to Budget column only for MarketingTeam
+GRANT SELECT ON COLUMN marketing_data.campaigns.Budget TO MarketingTeam;
+}
+```
+#### 3. Row-Level Security:
+```sql
+{
+-- Assuming there's a DepartmentID column in the orders table
+CREATE OR REPLACE VIEW operations_data.department_orders AS
+SELECT * FROM operations_data.orders
+WHERE DepartmentID = CURRENT_USER_ID();
+
+GRANT SELECT ON VIEW operations_data.department_orders TO OperationsTeam;
+}
+```
+# Task 5: Data Governance and Quality Enforcement
+#### 1. Set Data Quality Rules:
+```sql
+{
+-- Add constraints to tables
+ALTER TABLE marketing_data.campaigns ADD CONSTRAINT positive_budget CHECK (Budget > 0);
+
+ALTER TABLE operations_data.orders ADD CONSTRAINT valid_shipping_status CHECK (ShippingStatus IN ('Pending', 'Shipped', 'Delivered'));
+
+ALTER TABLE it_data.incidents ADD CONSTRAINT positive_resolution_time CHECK (ResolutionTime >= 0);
+}
+```
+#### 2. Apply Delta Lake Time Travel:
+```sql
+{
+-- View table history
+DESCRIBE HISTORY operations_data.orders;
+
+-- Revert to an earlier version (replace VERSION_NUMBER with the actual version number)
+RESTORE TABLE operations_data.orders TO VERSION AS OF VERSION_NUMBER;
+}
+```
+# Task 6: Performance Optimization and Data Cleanup
+#### 1. Optimize Delta Tables:
+```sql
+{
+OPTIMIZE operations_data.orders;
+OPTIMIZE it_data.incidents;
+}
+```
+#### 2. Vacuum Delta Tables:
+```sql
+{
+-- Vacuum tables (replace RETENTION_PERIOD with desired hours)
+VACUUM operations_data.orders RETAIN RETENTION_PERIOD HOURS;
+VACUUM it_data.incidents RETAIN RETENTION_PERIOD HOURS;
+}
